@@ -4,12 +4,12 @@
   const STORE_KEY = 'pos_demo_v1';
 
   const SEED_PRODUCTS = [
-    { code: 'SP001', name: '冰美式', price: 12 },
-    { code: 'SP002', name: '生椰拿铁', price: 16 },
-    { code: 'SP003', name: '手工蛋挞', price: 6.5 },
-    { code: 'SP004', name: '芝士贝果', price: 9 },
-    { code: '6901234567890', name: '柠檬茶 500ml', price: 5 },
-    { code: '6909876543210', name: '牛肉卷', price: 18 },
+    { code: 'SP001', name: '冰美式', price: 12, image: 'assets/img/americano.jpg' },
+    { code: 'SP002', name: '生椰拿铁', price: 16, image: 'assets/img/coconut.jpg' },
+    { code: 'SP003', name: '手工蛋挞', price: 6.5, image: 'assets/img/tart.jpg' },
+    { code: 'SP004', name: '芝士贝果', price: 9, image: 'assets/img/bagel.jpg' },
+    { code: '6901234567890', name: '柠檬茶 500ml', price: 5, image: 'assets/img/lemontea.jpg' },
+    { code: '6909876543210', name: '牛肉卷', price: 18, image: 'assets/img/beefroll.jpg' },
   ];
 
   /* ---------------- 工具 ---------------- */
@@ -33,6 +33,45 @@
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
   }
 
+  // 把本地图片压缩成正方形小图，避免占满本地存储
+  function fileToDataUrl(file, max = 720) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('image load failed'));
+      };
+      img.src = url;
+    });
+  }
+
+  // 缩略图：有图显示图片，没图显示首字
+  function thumbHtml(name, image, opts = {}) {
+    const cls = opts.cls || 'thumb';
+    const tag = opts.act ? 'button' : 'div';
+    const attrs = opts.act ? ` data-act="${opts.act}" data-code="${esc(opts.code || '')}"` : '';
+    const img = image ? `<img src="${esc(image)}" alt="" loading="lazy">` : '';
+    return `<${tag} class="${cls}"${attrs}><span>${esc(initial(name))}</span>${img}</${tag}>`;
+  }
+
+  function photoHtml(name, image, cls) {
+    return image
+      ? `<div class="${cls}"><img src="${esc(image)}" alt="${esc(name)}" loading="lazy"></div>`
+      : `<div class="${cls}"><span>${esc(initial(name))}</span></div>`;
+  }
+
   /* ---------------- 状态 ---------------- */
 
   function normalize(data) {
@@ -41,6 +80,7 @@
         code: String(p.code || '').trim(),
         name: String(p.name || ''),
         price: round2(Math.max(0, Number(p.price) || 0)),
+        image: String(p.image || ''),
       })).filter((p) => p.code),
       cart: (data.cart || []).filter((c) => c && c.code).map((c) => ({
         code: String(c.code),
@@ -85,7 +125,7 @@
       .map((entry) => {
         const p = findProduct(entry.code);
         if (!p) return null;
-        return { code: p.code, name: p.name, price: p.price, qty: entry.qty, subtotal: round2(p.price * entry.qty) };
+        return { code: p.code, name: p.name, price: p.price, image: p.image, qty: entry.qty, subtotal: round2(p.price * entry.qty) };
       })
       .filter(Boolean);
   }
@@ -235,7 +275,7 @@
     const lines = cartLines();
     els.cartList.innerHTML = lines.map((l) => `
       <div class="cart-item">
-        <div class="avatar">${esc(initial(l.name))}</div>
+        ${thumbHtml(l.name, l.image, { act: 'view-product', code: l.code, cls: 'thumb thumb-btn' })}
         <div class="ci-body">
           <div class="ci-top">
             <span class="ci-name">${esc(l.name)}</span>
@@ -261,13 +301,19 @@
     els.goodsCount.textContent = `(${list.length}/${state.products.length})`;
     els.goodsList.innerHTML = list.map((p) => `
       <div class="list-item">
-        <button class="item-tap" data-act="edit-product" data-code="${esc(p.code)}">
-          <div class="avatar">${esc(initial(p.name))}</div>
+        <button class="item-tap" data-act="view-product" data-code="${esc(p.code)}">
+          ${thumbHtml(p.name, p.image)}
           <div class="item-main">
             <div class="item-title">${esc(p.name)}</div>
             <div class="item-sub">${esc(p.code)}</div>
           </div>
           <div class="item-price">¥${money(p.price)}</div>
+        </button>
+        <button class="icon-btn edit" data-act="edit-product" data-code="${esc(p.code)}" aria-label="编辑">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 20h4l10.3-10.3a2 2 0 0 0 0-2.8l-1.2-1.2a2 2 0 0 0-2.8 0L4 16v4z"/>
+            <path d="m13.6 5.4 5 5"/>
+          </svg>
         </button>
         <button class="icon-btn del" data-act="del-product" data-code="${esc(p.code)}" aria-label="删除">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
@@ -314,7 +360,7 @@
     }
     els.lastScanCard.hidden = false;
     els.lastScanCard.innerHTML = `
-      <div class="avatar">${esc(initial(lastScan.name))}</div>
+      ${thumbHtml(lastScan.name, lastScan.image)}
       <div class="last-scan-main">
         <div class="t">最近加入 · ${esc(lastScan.name)}</div>
         <div class="s">¥${money(lastScan.price)} · 已加入购物车</div>
@@ -370,7 +416,7 @@
     if (!code) return;
     const product = addToCart(code);
     if (product) {
-      lastScan = { name: product.name, price: product.price, code: product.code };
+      lastScan = { name: product.name, price: product.price, code: product.code, image: product.image };
       renderLastScan();
       feedback(true);
       toast(`已加入 · ${product.name} ¥${money(product.price)}`);
@@ -746,6 +792,7 @@
 
   function openProductSheet(product = null, presetCode = '') {
     const isEdit = Boolean(product);
+    let draftImage = isEdit ? (product.image || '') : '';
     const body = `
       <label class="field">
         <span>商品名称</span>
@@ -762,7 +809,21 @@
       <label class="field">
         <span>单价（元）</span>
         <input id="f-price" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" value="${isEdit ? product.price : ''}">
-      </label>`;
+      </label>
+      <div class="field">
+        <span>商品图片</span>
+        <div class="img-field">
+          <div class="img-preview" id="f-img-preview">${draftImage
+            ? `<img src="${esc(draftImage)}" alt="">`
+            : `<span>${esc(initial(isEdit ? product.name : ''))}</span>`}</div>
+          <div class="img-actions">
+            <button class="btn ghost sm" type="button" id="f-img-pick">拍照 / 相册</button>
+            <button class="btn ghost sm" type="button" id="f-img-clear">移除</button>
+          </div>
+        </div>
+        <input type="file" id="f-img-input" accept="image/*" hidden>
+        <small>选好的图片只保存在本机，点商品即可查看大图</small>
+      </div>`;
 
     openSheet({
       title: isEdit ? '编辑商品' : '新增商品',
@@ -789,9 +850,9 @@
               if (product.code !== code) {
                 state.cart.forEach((c) => { if (c.code === product.code) c.code = code; });
               }
-              Object.assign(product, { name, code, price: round2(price) });
+              Object.assign(product, { name, code, price: round2(price), image: draftImage });
             } else {
-              state.products.push({ name, code, price: round2(price) });
+              state.products.push({ name, code, price: round2(price), image: draftImage });
             }
             saveState();
             renderAll();
@@ -804,8 +865,69 @@
         $('#f-gen', sheet).addEventListener('click', () => {
           $('#f-code', sheet).value = nextCode();
         });
-        setTimeout(() => $('#f-name', sheet).focus(), 150);
+
+        const preview = $('#f-img-preview', sheet);
+        const nameInput = $('#f-name', sheet);
+        const renderPreview = () => {
+          preview.innerHTML = draftImage
+            ? `<img src="${esc(draftImage)}" alt="">`
+            : `<span>${esc(initial(nameInput.value))}</span>`;
+        };
+        const fileInput = $('#f-img-input', sheet);
+        $('#f-img-pick', sheet).addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', async (ev) => {
+          const file = ev.target.files && ev.target.files[0];
+          if (!file) return;
+          try {
+            draftImage = await fileToDataUrl(file);
+            renderPreview();
+            toast('图片已选择，保存后生效');
+          } catch (err) {
+            toast('图片读取失败，换一张试试');
+          }
+        });
+        $('#f-img-clear', sheet).addEventListener('click', () => {
+          draftImage = '';
+          renderPreview();
+        });
+        nameInput.addEventListener('input', () => { if (!draftImage) renderPreview(); });
+
+        setTimeout(() => nameInput.focus(), 150);
       },
+    });
+  }
+
+  function openProductDetail(code) {
+    const product = findProduct(code);
+    if (!product) return toast('商品不存在');
+    const inCart = state.cart.find((c) => c.code === product.code);
+    const body = `
+      ${photoHtml(product.name, product.image, 'detail-photo')}
+      <div class="detail-meta">
+        <div class="detail-name">${esc(product.name)}</div>
+        <div class="detail-sub">商品码 · ${esc(product.code)}</div>
+        <div class="detail-price">¥${money(product.price)}</div>
+        ${inCart ? `<div class="detail-badge">购物车中已有 ${inCart.qty} 件</div>` : ''}
+      </div>`;
+
+    openSheet({
+      title: '商品详情',
+      body,
+      actions: [
+        { label: '编辑', key: 'edit', onClick: () => { closeSheet(); setTimeout(() => openProductSheet(product), 240); } },
+        {
+          label: '加入购物车',
+          key: 'add',
+          kind: 'primary',
+          onClick: () => {
+            addToCart(product.code);
+            lastScan = { name: product.name, price: product.price, code: product.code, image: product.image };
+            renderLastScan();
+            closeSheet();
+            toast(`已加入 · ${product.name}`);
+          },
+        },
+      ],
     });
   }
 
@@ -1107,12 +1229,14 @@
     const { act, code } = btn.dataset;
     if (act === 'inc') changeQty(code, 1);
     if (act === 'dec') changeQty(code, -1);
+    if (act === 'view-product') openProductDetail(code);
   });
 
   els.goodsList.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-act]');
     if (!btn) return;
     const { act, code } = btn.dataset;
+    if (act === 'view-product') openProductDetail(code);
     if (act === 'edit-product') {
       const product = findProduct(code);
       if (product) openProductSheet(product);
@@ -1146,6 +1270,11 @@
   /* ---------------- 启动 ---------------- */
 
   if (!window.isSecureContext) showSecureHint();
+  // 图片加载失败时去掉 img，露出首字占位
+  document.addEventListener('error', (e) => {
+    const img = e.target;
+    if (img && img.tagName === 'IMG' && img.closest('.thumb, .img-preview, .detail-photo')) img.remove();
+  }, true);
   renderAll();
   refreshPermLine();
   window.__APP_READY__ = true;
