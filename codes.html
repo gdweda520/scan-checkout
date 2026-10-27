@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>测试码 · 扫码用</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 20px 40px;
+    background: #fff;
+    color: #111;
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    text-align: center;
+  }
+  h1 { font-size: 18px; margin: 0 0 6px; }
+  p.tip { font-size: 13px; color: #666; margin: 0 0 22px; line-height: 1.6; }
+  .block { margin-bottom: 34px; }
+  .name { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .code-text { font-size: 13px; color: #666; margin-bottom: 12px; font-family: ui-monospace, Menlo, monospace; }
+  canvas { background: #fff; }
+  #qr { width: min(66vmin, 480px); height: auto; image-rendering: pixelated; border: 1px solid #eee; }
+  #bar { width: min(92vw, 760px); height: auto; image-rendering: pixelated; border: 1px solid #eee; }
+  .warn { max-width: 560px; margin: 0 auto; font-size: 12.5px; color: #999; line-height: 1.7; }
+  button {
+    margin: 4px 6px 0;
+    padding: 9px 16px;
+    font-size: 13px;
+    border: 1px solid #d8dbe2;
+    border-radius: 10px;
+    background: #f6f7f9;
+    color: #111;
+    cursor: pointer;
+  }
+  @media print {
+    body { padding: 0; }
+    button, .tip, .warn { display: none; }
+    .block { page-break-inside: avoid; margin-bottom: 10mm; }
+    #qr { width: 120mm; }
+    #bar { width: 150mm; }
+  }
+</style>
+</head>
+<body>
+<h1>测试码</h1>
+<p class="tip">用手机上的收银页扫这个二维码。扫描时把电脑屏幕亮度调高，手机距离 15~25cm。</p>
+
+<div class="block">
+  <div class="name">二维码 · 冰美式 ¥12</div>
+  <div class="code-text">SP001</div>
+  <canvas id="qr"></canvas>
+</div>
+
+<div class="block">
+  <div class="name">条形码 · EAN-13（扫码后会提示未录入，可走一次录入流程）</div>
+  <div class="code-text">6901234567892</div>
+  <canvas id="bar"></canvas>
+</div>
+
+<div>
+  <button onclick="window.print()">打印这一页</button>
+  <button onclick="location.href='/'">打开收银页</button>
+</div>
+
+<p class="warn">屏幕上的码可能因为摩尔纹扫不出来，这是正常的。如果二维码扫不出来，先试「拍照识别」拍这张屏幕；再不行就用手动输入 SP001 验证整个流程。</p>
+
+<script src="assets/vendor/qrcode.js"></script>
+<script>
+(function () {
+  // 二维码：按模块绘制，保证边缘锐利
+  var qr = qrcode(0, 'M');
+  qr.addData('SP001');
+  qr.make();
+  var n = qr.getModuleCount();
+  var cell = 10;
+  var margin = 4;
+  var size = (n + margin * 2) * cell;
+  var qc = document.getElementById('qr');
+  qc.width = size;
+  qc.height = size;
+  var qctx = qc.getContext('2d');
+  qctx.fillStyle = '#fff';
+  qctx.fillRect(0, 0, size, size);
+  qctx.fillStyle = '#000';
+  for (var y = 0; y < n; y++) {
+    for (var x = 0; x < n; x++) {
+      if (qr.isDark(y, x)) qctx.fillRect((x + margin) * cell, (y + margin) * cell, cell, cell);
+    }
+  }
+
+  // EAN-13：手工编码 6901234567892
+  var L = ['0001101','0011001','0010011','0111101','0100011','0110001','0101111','0111011','0110111','0001011'];
+  var G = ['0100111','0110011','0011011','0100001','0011101','0111001','0000101','0010001','0001001','0010111'];
+  var R = ['1110010','1100110','1101100','1000010','1011100','1001110','1010000','1000100','1001000','1110100'];
+  var parity = ['LLLLLL','LLGLGG','LLGGLG','LLGGGL','LGLLGG','LGGLLG','LGGGLL','LGLGLG','LGLGGL','LGGLGL'];
+  var digits = '6901234567892';
+  var d = digits.split('').map(Number);
+  var seq = parity[d[0]];
+  var bits = '101';
+  for (var i = 1; i <= 6; i++) bits += (seq[i - 1] === 'L' ? L : G)[d[i]];
+  bits += '01010';
+  for (var j = 7; j <= 12; j++) bits += R[d[j]];
+  bits += '101';
+
+  var module = 6;
+  var quiet = 14;
+  var H = 220;
+  var bc = document.getElementById('bar');
+  bc.width = (bits.length + quiet * 2) * module;
+  bc.height = H;
+  var bctx = bc.getContext('2d');
+  bctx.fillStyle = '#fff';
+  bctx.fillRect(0, 0, bc.width, H);
+  bctx.fillStyle = '#000';
+  for (var k = 0; k < bits.length; k++) {
+    if (bits[k] === '1') bctx.fillRect((k + quiet) * module, 16, module, H - 32);
+  }
+
+  document.title = '测试码 · SP001 二维码 + EAN-13 条形码';
+})();
+</script>
+</body>
+</html>
