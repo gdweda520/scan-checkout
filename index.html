@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f4f5f7">
+<title>随手收银 · 扫码结算</title>
+<script>
+/* 页面脚本加载失败时给出可见提示，避免"点了没反应"却看不出原因 */
+(function () {
+  function showLoadError(msg) {
+    if (document.getElementById('load-error')) return;
+    var host = document.body || document.documentElement;
+    var bar = document.createElement('div');
+    bar.id = 'load-error';
+    bar.className = 'load-error';
+    bar.textContent = msg;
+    host.insertBefore(bar, host.firstChild);
+  }
+  window.addEventListener('error', function (e) {
+    showLoadError('页面出错：' + ((e && e.message) || '未知错误') + ' · 请下拉刷新');
+  }, true);
+  window.addEventListener('load', function () {
+    setTimeout(function () {
+      if (!window.__APP_READY__) showLoadError('页面脚本未加载完成 · 请下拉刷新或关闭页面重开');
+    }, 2000);
+  });
+})();
+</script>
+<link rel="stylesheet" href="assets/app.css?v=5">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">收</div>
+      <div class="brand-text">
+        <h1>随手收银</h1>
+        <p>扫码入车 · 一键结算 · v7</p>
+      </div>
+    </div>
+    <button class="cart-pill" data-goto="cart">
+      <span class="cart-pill-count" id="pill-count">0 件</span>
+      <strong id="pill-total">¥0.00</strong>
+    </button>
+  </header>
+
+  <main class="main">
+    <!-- 扫码 -->
+    <section class="view" id="view-scan">
+      <div class="scanner" id="scanner">
+        <video id="video" playsinline muted autoplay></video>
+        <div class="scanner-idle" id="scanner-idle">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+            <path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16"/>
+            <path d="M7 12h10"/>
+          </svg>
+          <span>点这里开启摄像头扫码</span>
+        </div>
+        <div class="scan-frame"><span class="laser"></span></div>
+        <div class="scanner-foot">把二维码 / 条形码放进框内</div>
+        <div class="scan-status" id="scan-status" hidden>正在启动摄像头…</div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn primary" id="btn-camera">开启摄像头</button>
+        <label class="btn ghost" id="btn-photo" for="photo-input">拍照识别</label>
+      </div>
+      <p class="perm-line" id="perm-line" hidden></p>
+      <p class="scan-formats">
+        支持二维码，以及 EAN-13 / EAN-8 / UPC / Code128 / Code39 / ITF 等条形码
+        <button class="link-btn" id="btn-selftest" type="button">引擎自检</button>
+      </p>
+      <p class="engine-line" id="engine-line" hidden></p>
+      <input type="file" id="photo-input" class="file-input" accept="image/*" capture="environment">
+
+      <div class="hint warn" id="secure-hint" hidden></div>
+
+      <div class="card">
+        <div class="card-title">手动输入 / 扫码枪</div>
+        <form class="manual" id="manual-form" autocomplete="off">
+          <input id="manual-code" placeholder="例：SP001 或 6901234567890" enterkeyhint="done" autocomplete="off">
+          <button class="btn primary sm" type="submit">加入</button>
+        </form>
+        <div class="chips-line">
+          <span class="chips-label">没有实物？点一下试试</span>
+          <div class="chips" id="demo-chips"></div>
+        </div>
+      </div>
+
+      <div class="card last-scan" id="last-scan-card" hidden></div>
+    </section>
+
+    <!-- 购物车 -->
+    <section class="view" id="view-cart" hidden>
+      <div class="view-head">
+        <h2>购物车</h2>
+        <button class="link" id="btn-clear">清空</button>
+      </div>
+      <div class="list" id="cart-list"></div>
+      <div class="empty" id="cart-empty" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <path d="M3 4h2l2.2 10.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 2-1.5L20.5 7H6"/>
+          <circle cx="10" cy="20" r="1.1"/><circle cx="17.5" cy="20" r="1.1"/>
+        </svg>
+        <p>购物车还是空的</p>
+        <button class="btn primary sm" data-goto="scan">去扫码</button>
+      </div>
+    </section>
+
+    <!-- 商品 -->
+    <section class="view" id="view-goods" hidden>
+      <div class="view-head">
+        <h2>商品 <span class="count" id="goods-count"></span></h2>
+        <div class="head-actions">
+          <button class="btn ghost sm" id="btn-labels">二维码标签</button>
+          <button class="btn primary sm" id="btn-add-product">新增</button>
+        </div>
+      </div>
+      <div class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+        <input id="goods-search" placeholder="搜索商品名称或商品码" autocomplete="off">
+      </div>
+      <div class="list" id="goods-list"></div>
+      <button class="link danger reset-link" id="btn-reset">恢复示例商品数据</button>
+    </section>
+
+    <!-- 订单 -->
+    <section class="view" id="view-orders" hidden>
+      <div class="view-head"><h2>订单记录</h2></div>
+      <div class="stats" id="order-stats"></div>
+      <div class="list" id="orders-list"></div>
+      <div class="empty" id="orders-empty" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <path d="M6 3.5h12v17l-3-1.6-3 1.6-3-1.6-3 1.6z"/><path d="M9 8h6M9 12h6"/>
+        </svg>
+        <p>还没有结算记录</p>
+      </div>
+    </section>
+  </main>
+
+  <div class="checkout-bar" id="checkout-bar" hidden>
+    <div class="checkout-info">
+      <span id="checkout-count">0 件</span>
+      <strong id="checkout-total">¥0.00</strong>
+    </div>
+    <button class="btn primary lg" id="btn-checkout">结算</button>
+  </div>
+
+  <nav class="tabbar">
+    <button class="tab active" data-tab="scan">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16M4.5 12h15"/>
+      </svg>
+      <span>扫码</span>
+    </button>
+    <button class="tab" data-tab="cart">
+      <span class="tab-badge" id="tab-cart-badge" hidden>0</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 4h2l2.2 10.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 2-1.5L20.5 7H6"/>
+        <circle cx="10" cy="20" r="1.1"/><circle cx="17.5" cy="20" r="1.1"/>
+      </svg>
+      <span>购物车</span>
+    </button>
+    <button class="tab" data-tab="goods">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3.5 20 7.6v8.8L12 20.5 4 16.4V7.6z"/><path d="M4 7.6 12 11.7l8-4.1M12 11.7v8.8"/>
+      </svg>
+      <span>商品</span>
+    </button>
+    <button class="tab" data-tab="orders">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 3.5h12v17l-3-1.6-3 1.6-3-1.6-3 1.6z"/><path d="M9 8h6M9 12h6"/>
+      </svg>
+      <span>订单</span>
+    </button>
+  </nav>
+</div>
+
+<div class="toast-wrap" id="toast-wrap"></div>
+<div id="modal-root"></div>
+
+<script src="assets/vendor/zxing.min.js"></script>
+<script src="assets/vendor/qrcode.js"></script>
+<script src="assets/app.js?v=7"></script>
+</body>
+</html>
