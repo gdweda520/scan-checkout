@@ -27,7 +27,7 @@
   });
 })();
 </script>
-<link rel="stylesheet" href="assets/app.css?v=6">
+<link rel="stylesheet" href="assets/app.css?v=7">
 </head>
 <body>
 <div class="app">
@@ -36,7 +36,7 @@
       <div class="logo">收</div>
       <div class="brand-text">
         <h1>随手收银</h1>
-        <p>扫码入车 · 一键结算 · v8</p>
+        <p>扫码入车 · 一键结算 · v10</p>
       </div>
     </div>
     <button class="cart-pill" data-goto="cart">
@@ -75,6 +75,16 @@
       <input type="file" id="photo-input" class="file-input" accept="image/*" capture="environment">
 
       <div class="hint warn" id="secure-hint" hidden></div>
+
+      <div class="card">
+        <div class="card-title">搜索商品加车</div>
+        <div class="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+          <input id="scan-search" placeholder="输入商品名或商品码，如「三脚架」" autocomplete="off" enterkeyhint="search">
+        </div>
+        <div class="list" id="scan-results" hidden></div>
+        <p class="chips-label" id="scan-results-tip" hidden></p>
+      </div>
 
       <div class="card">
         <div class="card-title">手动输入 / 扫码枪</div>
@@ -122,7 +132,11 @@
         <input id="goods-search" placeholder="搜索商品名称或商品码" autocomplete="off">
       </div>
       <div class="list" id="goods-list"></div>
-      <button class="link danger reset-link" id="btn-reset">恢复示例商品数据</button>
+      <div class="foot-links">
+        <button class="link" id="btn-import">导入进销存数据（.json）</button>
+        <button class="link danger" id="btn-reset">恢复示例商品数据</button>
+      </div>
+      <input type="file" id="import-input" class="file-input" accept=".json,application/json">
     </section>
 
     <!-- 订单 -->
@@ -183,6 +197,6 @@
 <script src="assets/vendor/zxing.min.js"></script>
 <script src="assets/vendor/qrcode.js"></script>
 <script src="assets/vendor/jsbarcode.min.js"></script>
-<script src="assets/app.js?v=9"></script>
+<script src="assets/app.js?v=10"></script>
 </body>
 </html>
