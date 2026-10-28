@@ -129,6 +129,65 @@ button { font: inherit; }
 .link.danger { color: var(--danger); }
 .reset-link { display: block; margin: 22px auto 8px; }
 
+/* ---------- 底部文字链接 ---------- */
+.foot-links {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 20px 0 10px;
+}
+
+/* ---------- 搜索结果 / 导入选项 ---------- */
+.scan-result .item-sub { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.scan-result .item-price { color: var(--accent); }
+
+.opt-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 0;
+  border-bottom: 1px solid #eef1f5;
+}
+.opt-row:last-child { border-bottom: 0; }
+.opt-row input[type="checkbox"] {
+  width: 19px;
+  height: 19px;
+  margin: 1px 0 0;
+  flex: 0 0 auto;
+  accent-color: var(--accent);
+}
+.opt-main { flex: 1; min-width: 0; }
+.opt-title { font-size: 13.5px; font-weight: 600; }
+.opt-desc { font-size: 11.5px; color: var(--muted); line-height: 1.55; margin-top: 3px; }
+.opt-num {
+  width: 68px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  font-size: 15px;
+  text-align: center;
+  outline: none;
+  flex: 0 0 auto;
+}
+.opt-num:focus { border-color: rgba(15, 157, 92, .45); }
+
+.imp-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.imp-summary div {
+  background: #f6f8fa;
+  border-radius: 10px;
+  padding: 9px 8px;
+  text-align: center;
+}
+.imp-summary span { display: block; font-size: 11px; color: var(--muted); }
+.imp-summary b { display: block; font-size: 16px; margin-top: 3px; }
+
 /* ---------- 按钮 ---------- */
 .btn {
   appearance: none;
