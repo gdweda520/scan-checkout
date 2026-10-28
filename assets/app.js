@@ -148,6 +148,9 @@
     scanStatus: $('#scan-status'),
     manualForm: $('#manual-form'),
     manualCode: $('#manual-code'),
+    scanSearch: $('#scan-search'),
+    scanResults: $('#scan-results'),
+    scanResultsTip: $('#scan-results-tip'),
     demoChips: $('#demo-chips'),
     lastScanCard: $('#last-scan-card'),
     pillCount: $('#pill-count'),
@@ -165,6 +168,8 @@
     goodsSearch: $('#goods-search'),
     btnAddProduct: $('#btn-add-product'),
     btnLabels: $('#btn-labels'),
+    btnImport: $('#btn-import'),
+    importInput: $('#import-input'),
     btnReset: $('#btn-reset'),
     ordersList: $('#orders-list'),
     ordersEmpty: $('#orders-empty'),
@@ -298,8 +303,12 @@
   function renderGoods() {
     const q = els.goodsSearch.value.trim().toLowerCase();
     const list = state.products.filter((p) => !q || p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q));
-    els.goodsCount.textContent = `(${list.length}/${state.products.length})`;
-    els.goodsList.innerHTML = list.map((p) => `
+    const MAX = 300;
+    const show = list.slice(0, MAX);
+    els.goodsCount.textContent = list.length > MAX
+      ? `(显示前 ${MAX}/${list.length})`
+      : `(${list.length}/${state.products.length})`;
+    els.goodsList.innerHTML = show.map((p) => `
       <div class="list-item">
         <button class="item-tap" data-act="view-product" data-code="${esc(p.code)}">
           ${thumbHtml(p.name, p.image)}
@@ -353,6 +362,32 @@
     els.ordersEmpty.hidden = state.orders.length > 0;
   }
 
+  function renderScanResults() {
+    const q = els.scanSearch.value.trim().toLowerCase();
+    if (!q) {
+      els.scanResults.hidden = true;
+      els.scanResultsTip.hidden = true;
+      els.scanResults.innerHTML = '';
+      return;
+    }
+    const hits = state.products.filter((p) => p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q));
+    const show = hits.slice(0, 20);
+    els.scanResults.innerHTML = show.map((p) => `
+      <div class="list-item">
+        <button class="item-tap scan-result" data-act="add-by-search" data-code="${esc(p.code)}">
+          ${thumbHtml(p.name, p.image)}
+          <div class="item-main">
+            <div class="item-title">${esc(p.name)}</div>
+            <div class="item-sub">${esc(p.code)}</div>
+          </div>
+          <div class="item-price">¥${money(p.price)}</div>
+        </button>
+      </div>`).join('');
+    els.scanResults.hidden = show.length === 0;
+    els.scanResultsTip.hidden = hits.length <= 20;
+    els.scanResultsTip.textContent = hits.length > 20 ? `共 ${hits.length} 个匹配，只显示前 20 个 · 请再输入几个字缩小范围` : '';
+  }
+
   function renderLastScan() {
     if (!lastScan) {
       els.lastScanCard.hidden = true;
@@ -371,7 +406,8 @@
   function renderAll() {
     renderChrome();
     renderCart();
-    renderGoods();
+    // 商品可能上千条，只在商品页可见时才渲染，避免每次加车卡顿
+    if (currentTab === 'goods') renderGoods();
     renderOrders();
     renderLastScan();
   }
@@ -1155,12 +1191,208 @@
     });
   }
 
+  /* ---------------- 导入进销存 JSON ---------------- */
+
+  const JUNK_NAME = /^商品_\d+$/;
+  const JUNK_CODE = /^AUTO_/i;
+
+  const posNum = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
+
+  // 从任意 JSON 结构里找出商品数组
+  function pickProductArray(data) {
+    if (Array.isArray(data)) return data;
+    if (!data || typeof data !== 'object') return null;
+    if (Array.isArray(data.products)) return data.products;
+    for (const key of Object.keys(data)) {
+      if (Array.isArray(data[key]) && data[key].some((x) => x && typeof x === 'object' && (x.name || x.code))) {
+        return data[key];
+      }
+    }
+    return null;
+  }
+
+  function pickPrice(raw, markup) {
+    const retail = posNum(raw.retailPrice);
+    const wholesale = posNum(raw.wholesalePrice);
+    const purchase = posNum(raw.purchasePrice);
+    if (retail) return round2(retail);
+    if (wholesale) return round2(wholesale);
+    if (purchase) return round2(purchase * markup);
+    return 0;
+  }
+
+  function buildImportProducts(list, opts) {
+    const out = [];
+    const usedCode = new Set();
+    const usedName = new Set();
+    let seq = 100000;
+
+    const nextShort = () => {
+      while (usedCode.has(String(seq))) seq += 1;
+      const code = String(seq);
+      usedCode.add(code);
+      return code;
+    };
+
+    list.forEach((raw) => {
+      if (!raw || typeof raw !== 'object') return;
+      const name = String(raw.name || '').trim();
+      if (!name) return;
+      if (opts.filterJunk && (JUNK_NAME.test(name) || JUNK_CODE.test(String(raw.code || '').trim()))) return;
+      if (opts.onlyInStock && !(posNum(raw.stock) > 0)) return;
+      if (usedName.has(name)) return;
+      usedName.add(name);
+
+      let code = String(raw.code || '').trim();
+      if (opts.shortCode) {
+        const keep = code && code.length <= 12 && code !== name && !usedCode.has(code);
+        code = keep ? code : nextShort();
+      } else if (!code || usedCode.has(code)) {
+        code = nextShort();
+      }
+      usedCode.add(code);
+
+      out.push({ code, name, price: pickPrice(raw, opts.markup), image: '' });
+    });
+
+    return out;
+  }
+
+  function previewImport(list, opts) {
+    let kept = 0;
+    const seen = new Set();
+    list.forEach((raw) => {
+      if (!raw || typeof raw !== 'object') return;
+      const name = String(raw.name || '').trim();
+      if (!name) return;
+      if (opts.filterJunk && (JUNK_NAME.test(name) || JUNK_CODE.test(String(raw.code || '').trim()))) return;
+      if (opts.onlyInStock && !(posNum(raw.stock) > 0)) return;
+      if (seen.has(name)) return;
+      seen.add(name);
+      kept += 1;
+    });
+    return kept;
+  }
+
+  function openImportSheet(list, fileName) {
+    const rawTotal = list.length;
+    const stockOn = list.filter((x) => x && posNum(x.stock) > 0).length;
+    const junkOn = list.filter((x) => x && (JUNK_NAME.test(String(x.name || '').trim()) || JUNK_CODE.test(String(x.code || '').trim()))).length;
+    const noPrice = list.filter((x) => x && !posNum(x.retailPrice) && !posNum(x.wholesalePrice) && !posNum(x.purchasePrice)).length;
+
+    const opts = { onlyInStock: true, filterJunk: true, shortCode: true, markup: 1.3 };
+
+    const mask = openSheet({
+      title: '导入商品数据',
+      body: `
+        <div class="imp-summary">
+          <div><span>文件总数</span><b>${rawTotal}</b></div>
+          <div><span>库存 &gt; 0</span><b>${stockOn}</b></div>
+          <div><span>测试数据</span><b>${junkOn}</b></div>
+        </div>
+        <p class="sheet-text" style="margin-bottom:8px">文件：${esc(fileName)}</p>
+        ${noPrice ? `<p class="sheet-text" style="margin-bottom:10px">其中 <b>${noPrice}</b> 个商品三种价格全为 0，导入后售价会显示 ¥0.00，需要手动补价。</p>` : ''}
+        <label class="opt-row">
+          <input type="checkbox" id="imp-instock" checked>
+          <div class="opt-main">
+            <div class="opt-title">只导入库存 &gt; 0 的商品</div>
+            <div class="opt-desc">其余 ${rawTotal - stockOn} 个库存为 0，导入后会在搜索结果里干扰你找货。</div>
+          </div>
+        </label>
+        <label class="opt-row">
+          <input type="checkbox" id="imp-junk" checked>
+          <div class="opt-main">
+            <div class="opt-title">过滤测试数据</div>
+            <div class="opt-desc">自动剔除「商品_51」「AUTO_51」这类命名明显是测试用的 ${junkOn} 条记录。</div>
+          </div>
+        </label>
+        <label class="opt-row">
+          <input type="checkbox" id="imp-short" checked>
+          <div class="opt-main">
+            <div class="opt-title">自动生成短商品码</div>
+            <div class="opt-desc">你的商品码大量等于商品全名（最长 52 字），印成条形码扫不出来。勾选后统一换成 6 位数字短码。</div>
+          </div>
+        </label>
+        <label class="opt-row">
+          <input type="number" id="imp-markup" class="opt-num" value="1.3" step="0.05" min="1" max="10">
+          <div class="opt-main">
+            <div class="opt-title">进价加价率</div>
+            <div class="opt-desc">售价 = 零售价 → 批发价 → 进价 × 该系数。你的数据里只有 ${list.filter((x) => x && posNum(x.retailPrice) > 0).length} 个商品填了零售价。</div>
+          </div>
+        </label>
+        <p class="sheet-text" id="imp-count" style="margin-top:12px;font-weight:600;color:var(--ink)"></p>
+        <p class="sheet-text" style="margin-top:6px">导入会替换现有全部商品并清空购物车；原始 JSON 文件还在，导错了重新导入即可。</p>`,
+      actions: [
+        { label: '取消', key: 'cancel' },
+        {
+          label: '开始导入',
+          key: 'ok',
+          kind: 'primary',
+          onClick: () => {
+            const products = buildImportProducts(list, opts);
+            if (!products.length) return toast('没有可导入的商品');
+            state.products = normalize({ products }).products;
+            state.cart = [];
+            lastScan = null;
+            saveState();
+            closeSheet();
+            els.goodsSearch.value = '';
+            renderCart();
+            renderLastScan();
+            switchTab('goods');
+            toast(`已导入 ${products.length} 个商品`);
+          },
+        },
+      ],
+      onMount: (mask) => {
+        const inStock = mask.querySelector('#imp-instock');
+        const junk = mask.querySelector('#imp-junk');
+        const short = mask.querySelector('#imp-short');
+        const markup = mask.querySelector('#imp-markup');
+        const count = mask.querySelector('#imp-count');
+
+        const sync = () => {
+          const m = Math.max(1, Number(markup.value) || 1);
+          opts.onlyInStock = inStock.checked;
+          opts.filterJunk = junk.checked;
+          opts.shortCode = short.checked;
+          opts.markup = m;
+          const kept = previewImport(list, opts);
+          count.textContent = `将导入 ${kept} 个商品（文件里共 ${rawTotal} 个）`;
+        };
+
+        [inStock, junk, short].forEach((el) => el.addEventListener('change', sync));
+        markup.addEventListener('input', sync);
+        sync();
+      },
+    });
+    return mask;
+  }
+
+  async function importJsonFile(file) {
+    if (!file) return;
+    if (file.size > 20 * 1024 * 1024) return toast('文件太大（超过 20MB），请只导出商品数据');
+    let data;
+    try {
+      data = JSON.parse(await file.text());
+    } catch (e) {
+      return toast('文件不是有效的 JSON，无法读取');
+    }
+    const list = pickProductArray(data);
+    if (!list || !list.length) return toast('这个 JSON 里没找到商品列表');
+    openImportSheet(list, file.name);
+  }
+
   /* ---------------- 切换视图 ---------------- */
 
   function switchTab(tab) {
     currentTab = tab;
     if (tab !== 'scan') stopCamera();
     renderChrome();
+    if (tab === 'goods') renderGoods();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -1270,6 +1502,28 @@
   });
 
   els.goodsSearch.addEventListener('input', renderGoods);
+
+  els.scanSearch.addEventListener('input', renderScanResults);
+
+  els.scanResults.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-act="add-by-search"]');
+    if (!btn) return;
+    const product = addToCart(btn.dataset.code);
+    if (!product) return;
+    lastScan = { name: product.name, price: product.price, code: product.code, image: product.image };
+    renderLastScan();
+    feedback(true);
+    toast(`已加入 · ${product.name} ¥${money(product.price)}`);
+    els.scanSearch.value = '';
+    renderScanResults();
+  });
+
+  els.btnImport.addEventListener('click', () => els.importInput.click());
+  els.importInput.addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    importJsonFile(file);
+  });
 
   els.btnAddProduct.addEventListener('click', () => openProductSheet());
   els.btnLabels.addEventListener('click', openLabelsSheet);
