@@ -1043,11 +1043,11 @@
       *{box-sizing:border-box}
       body{margin:0;padding:12px;color:#111;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
       .label{border:1px dashed #ccc;border-radius:8px;padding:6px;text-align:center;break-inside:avoid}
-      .label-qr{aspect-ratio:1;display:grid;place-items:center}
-      .label-qr svg{width:100%;height:100%}
+      .label-code{height:50px;display:flex;align-items:center;justify-content:center}
+      .label-code svg{max-width:100%;height:100%}
       .label-name{font-size:11px;font-weight:600;margin-top:4px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
       .label-meta{font-size:9px;color:#666;font-family:monospace}
-      .labels{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+      .labels{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
       @page{margin:8mm}
       ${extraCss}
     </style></head><body>${bodyHtml}<script>window.onload=function(){setTimeout(function(){window.print()},120)}<\/script></body></html>`);
@@ -1084,21 +1084,39 @@
     }
   }
 
+  function makeBarcodeSvg(text) {
+    try {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      JsBarcode(svg, text, {
+        format: 'CODE128',
+        width: 2,
+        height: 50,
+        displayValue: false,
+        margin: 2,
+        background: '#ffffff',
+        lineColor: '#000000',
+      });
+      return svg.outerHTML;
+    } catch (e) {
+      return '';
+    }
+  }
+
   function openLabelsSheet() {
     if (!state.products.length) return toast('还没有商品可以生成标签');
     const labels = state.products.map((p) => `
       <div class="label">
-        <div class="label-qr">${makeQrSvg(p.code)}</div>
+        <div class="label-code">${makeBarcodeSvg(p.code)}</div>
         <div class="label-name">${esc(p.name)}</div>
         <div class="label-meta">${esc(p.code)} · ¥${money(p.price)}</div>
       </div>`).join('');
 
     openSheet({
-      title: '商品二维码标签',
-      body: `<p class="sheet-text" style="margin-bottom:10px">打印后贴在商品或货架上，扫这个二维码就能识别并加车。</p><div class="labels">${labels}</div>`,
+      title: '商品条形码标签',
+      body: `<p class="sheet-text" style="margin-bottom:10px">打印后贴在商品或货架上，扫这个条形码就能识别并加车。</p><div class="labels">${labels}</div>`,
       actions: [
         { label: '关闭', key: 'close' },
-        { label: '打印标签', key: 'print', kind: 'primary', onClick: () => printWindow('商品二维码标签', `<div class="labels">${labels}</div>`) },
+        { label: '打印标签', key: 'print', kind: 'primary', onClick: () => printWindow('商品条形码标签', `<div class="labels">${labels}</div>`) },
       ],
     });
   }
